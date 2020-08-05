@@ -4,6 +4,7 @@ const puppeteer = require('puppeteer');
 const parseUrl = require('url-parse');
 const fileUrl = require('file-url');
 const isUrl = require('is-url');
+const fs = require('fs');
 
 // common options for both print and screenshot commands
 const commonOptions = {
@@ -66,6 +67,14 @@ const argv = require('yargs')
                 string: true,
                 default: ''
             },
+            'header-template-file': {
+                string: true,
+                default: ''
+            },
+            'footer-template-file': {
+                string: true,
+                default: ''
+            },
             'page-ranges': {
                 string: true,
                 default: ''
@@ -124,6 +133,17 @@ async function print(argv) {
     await page.goto(url, buildNavigationOptions(argv));
 
     console.error(`Writing ${argv.output || 'STDOUT'}`);
+
+    let headerTemplate = argv.headerTemplate
+    if(argv.headerTemplateFile){
+        headerTemplate = await readFile(argv.headerTemplateFile)
+    }
+
+    let footerTemplate = argv.footerTemplate
+    if(argv.footerTemplateFile){
+        footerTemplate = await readFile(argv.footerTemplateFile)
+    }
+
     const buffer = await page.pdf({
         path: argv.output || null,
         format: argv.format,
@@ -136,8 +156,8 @@ async function print(argv) {
             left: argv.marginLeft
         },
         displayHeaderFooter: argv.displayHeaderFooter,
-        headerTemplate: argv.headerTemplate,
-        footerTemplate: argv.footerTemplate,
+        headerTemplate: headerTemplate,
+        footerTemplate: footerTemplate,
         pageRanges: argv.pageRanges
     });
 
@@ -148,6 +168,17 @@ async function print(argv) {
     console.error('Done');
     await browser.close();
 }
+
+async function readFile(path) {
+    return new Promise((resolve, reject) => {
+      fs.readFile(path, 'utf8', function (err, data) {
+        if (err) {
+          reject(err);
+        }
+        resolve(data);
+      });
+    });
+  }
 
 async function screenshot(argv) {
     const browser = await puppeteer.launch(buildLaunchOptions(argv));
