@@ -78,6 +78,10 @@ const argv = require('yargs')
             'page-ranges': {
                 string: true,
                 default: ''
+            },
+            'pdf-stream': {
+                boolean: true,
+                default: false
             }
         },
         handler: async argv => {
@@ -119,10 +123,12 @@ const argv = require('yargs')
     .help()
     .argv;
 
+
 async function print(argv) {
     const browser = await puppeteer.launch(buildLaunchOptions(argv));
     const page = await browser.newPage();
     const url = isUrl(argv.url) ? parseUrl(argv.url).toString() : fileUrl(argv.url);
+    const pdfStream = argv.pdfStream;
 
     if (argv.cookie) {
         console.error(`Setting cookies`);
@@ -144,22 +150,43 @@ async function print(argv) {
         footerTemplate = await readFile(argv.footerTemplateFile)
     }
 
-    const buffer = await page.pdf({
-        path: argv.output || null,
-        format: argv.format,
-        landscape: argv.landscape,
-        printBackground: argv.background,
-        margin: {
-            top: argv.marginTop,
-            right: argv.marginRight,
-            bottom: argv.marginBottom,
-            left: argv.marginLeft
-        },
-        displayHeaderFooter: argv.displayHeaderFooter,
-        headerTemplate: headerTemplate,
-        footerTemplate: footerTemplate,
-        pageRanges: argv.pageRanges
-    });
+    let buffer;
+    if (pdfStream) {
+        buffer = await page.createPDFStream({
+            path: argv.output || null,
+            format: argv.format,
+            landscape: argv.landscape,
+            printBackground: argv.background,
+            margin: {
+                top: argv.marginTop,
+                right: argv.marginRight,
+                bottom: argv.marginBottom,
+                left: argv.marginLeft
+            },
+            displayHeaderFooter: argv.displayHeaderFooter,
+            headerTemplate: headerTemplate,
+            footerTemplate: footerTemplate,
+            pageRanges: argv.pageRanges
+        })
+        await streamToFile(buffer, argv.output);
+    } else {
+        buffer = await page.pdf({
+            path: argv.output || null,
+            format: argv.format,
+            landscape: argv.landscape,
+            printBackground: argv.background,
+            margin: {
+                top: argv.marginTop,
+                right: argv.marginRight,
+                bottom: argv.marginBottom,
+                left: argv.marginLeft
+            },
+            displayHeaderFooter: argv.displayHeaderFooter,
+            headerTemplate: headerTemplate,
+            footerTemplate: footerTemplate,
+            pageRanges: argv.pageRanges
+        });
+    }
 
     if (!argv.output) {
         await process.stdout.write(buffer);
@@ -178,7 +205,17 @@ async function readFile(path) {
         resolve(data);
       });
     });
-  }
+}
+
+const streamToFile = (inputStream, filePath) => {
+  return new Promise((resolve, reject) => {
+    const fileWriteStream = fs.createWriteStream(filePath)
+    inputStream
+      .pipe(fileWriteStream)
+      .on('finish', resolve)
+      .on('error', reject)
+  })
+}
 
 async function screenshot(argv) {
     const browser = await puppeteer.launch(buildLaunchOptions(argv));
